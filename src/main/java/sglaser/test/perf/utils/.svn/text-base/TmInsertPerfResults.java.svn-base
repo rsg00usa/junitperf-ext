@@ -1,0 +1,29 @@
+package com.yahoo.satg.utils;
+
+import java.io.File;
+
+/**
+ * Program to update performance test results to Test Manager
+ *
+ * @author sglaser
+ */
+
+public class TmInsertPerfResults {
+
+	public static void main(String[] args) {
+		
+		if (args.length != 1) {
+			System.out.println("ERROR: Enter a cvs file to update TM");
+            return;
+		}
+
+        if (!(new File(args[0])).exists()) {
+			System.out.println("ERROR: File does not exist: " + args[0]);
+            return;
+		}
+		
+		TestUtil testUtil = new TestUtil();
+		testUtil.csvFileInsertPerfResult(args[0]);
+	}
+
+}

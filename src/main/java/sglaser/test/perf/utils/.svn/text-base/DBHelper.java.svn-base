@@ -1,0 +1,108 @@
+package com.yahoo.satg.utils;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+import org.apache.log4j.Logger;
+
+/**
+ * Helper class for accessing DB
+ * 
+ * @author sglaser
+ *
+ */
+public abstract class DBHelper {
+
+        private static final Logger log = Logger.getLogger(DBHelper.class);
+        private static TestUtil testUtil;
+        
+    private static String jdbcUrl;
+    private static String jdbcUser;
+    private static String jdbcPasswd;
+    
+    private static Connection conn;
+        private static PreparedStatement pStmt;
+        
+        // These queries can get overridden from xml config file
+    private static final String GET_REPL_MSG_30 = "select msg0 from REPL.repl_msg_h1 where xaction_id > sys_extract_utc(systimestamp) - (30*60/86400) and entity_name = ? and namespace = ? order by xaction_id desc";
+    private static final String GET_REPL_MSG_180 = "select msg0 from REPL.repl_msg_h1 where xaction_id > sys_extract_utc(systimestamp) - (4/24) and entity_name = ? and namespace = ? order by xaction_id desc";
+    private static final String GET_REPL_MSG_DISTRO = "select msg0 from distro.distro_delta_h1 where xaction_id > sys_extract_utc(systimestamp) - (30*60/86400) and entity_name = ? and namespace = ? order by xaction_id desc";
+        
+    /*
+     * DB initialization, connection and close methods
+     */
+    
+        public static void dbSetup() {
+                
+                String env = System.getProperty("env");
+                log.debug("Env set to " + env); 
+        if (env == null || env.length() == 0) throw new RuntimeException("System property 'env' not set");
+        
+        if (testUtil == null) testUtil = new TestUtil();
+        
+        // Get db connect info from xml file
+        jdbcUrl = testUtil.getTestElementByName(env, "jdbc_url").getTextContent();
+        jdbcUser = testUtil.getTestElementByName(env, "jdbc_user").getTextContent();
+        jdbcPasswd = testUtil.getTestElementByName(env, "jdbc_passwd").getTextContent();
+        log.debug("jdbcUrl = " + jdbcUrl + ", jdbcUser = " + jdbcUser + ", jdbcPasswd = " + jdbcPasswd);
+        }
+
+        public static void dbSetup(String url, String user, String passwd) {
+                
+                jdbcUrl = url;
+                jdbcUser = user;
+                jdbcPasswd = passwd;
+        }
+        
+        public static Connection getConnection() {
+                
+                Connection connect = null;
+                
+                try {
+                        DriverManager.registerDriver(new oracle.jdbc.driver.OracleDriver());
+                        connect = DriverManager.getConnection(jdbcUrl, jdbcUser, jdbcPasswd);
+                } catch (SQLException e) {
+                        e.printStackTrace();
+                }
+                
+                return connect;
+        }
+        
+        public static void dbTeardown() throws SQLException {
+            pStmt.close(); 
+            conn.close();
+        }
+        
+        /*
+         * Specific ResultSet methods
+         */
+        
+        public static ResultSet getReplResultSet(String entity, String namespace) {
+                
+                ResultSet rs = null;
+                
+                try {
+                        conn = getConnection();
+                        if(System.getProperties().containsKey("Distro")){
+                        log.debug("Using query string = " + GET_REPL_MSG_DISTRO);
+                    pStmt = conn.prepareStatement(GET_REPL_MSG_DISTRO);
+                        }
+                        else{
+                        	log.debug("Using query string = " + GET_REPL_MSG_30);
+                            pStmt = conn.prepareStatement(GET_REPL_MSG_30);
+                        }
+                    pStmt.setString(1, entity);
+                    pStmt.setString(2, namespace);
+                
+                    rs = pStmt.executeQuery();
+                    
+                } catch (SQLException e) {
+                        e.printStackTrace();
+                }
+                
+                return rs;
+        }
+}

@@ -1,0 +1,198 @@
+package com.yahoo.satg.utils;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.io.Writer;
+import java.util.HashMap;
+import org.apache.log4j.Logger;
+import com.yahoo.satg.utils.TestId;
+import com.yahoo.satg.utils.TestUtil;
+import com.yahoo.sm.ads.common.app.test.AbstractSpringEnabledTestCase;
+
+
+public class GenericBaseTestCase extends AbstractSpringEnabledTestCase 
+{
+
+	protected static final Logger log = Logger.getLogger(GenericBaseTestCase.class);
+	private static boolean oneTimeSetUp = true;
+	public static TestUtil testUtil;
+	protected Throwable error;
+	
+	protected static int testCaseIdFromTest = 0;
+	protected static StringBuilder sb = new StringBuilder();
+	
+	private static boolean blockThreads = true;
+	public GenericBaseTestCase(String name)
+	{
+		super(name);
+	}
+	
+	protected void setUp() throws Exception 
+	{
+		super.setUp();
+
+		testCaseIdFromTest = 0;
+		sb.setLength(0);
+		
+		oneTimeSetUp();
+	}
+	
+    // In multi-threaded mode only one thread should invoke oneTimeSetup
+	public void oneTimeSetUp() throws Exception 
+	{
+		if (oneTimeSetUp) {
+			oneTimeSetUp = false;
+			testUtil = getTestUtil();
+			testUtil.setTestEnvData();
+            blockThreads = false;
+		}
+		
+        // All other threads wait for thread running oneTimeSetUp to finish
+		while (blockThreads) {
+        	Thread.sleep(250); }
+	}
+
+	public static TestUtil getTestUtil() throws Exception {
+		return getTestUtil(false);
+	}
+
+	public static TestUtil getTestUtil(boolean setTestEnv) throws Exception {
+		if (testUtil == null)
+			testUtil = new TestUtil();
+		if (setTestEnv == true)
+			testUtil.setTestEnvData();
+		return testUtil;
+	}
+
+	/*
+	 * Updating the TM with pass and fail log. 
+	 */
+	protected void tearDown() throws Exception {
+		super.tearDown();
+		String testType = System.getProperty("testType");
+		String updateTM = System.getProperty("updateTM", "true");
+		
+		String Description="";
+		int testCaseId = testCaseIdFromTest;
+		
+		if (testCaseId == 0) {
+			TestId testId = getClass().getMethod(super.getName()).getAnnotation(TestId.class);
+			if (testId != null) {
+				testCaseId = testId.value();
+			}
+		}
+		
+		if(sb.length()==0)
+		{
+			sb.append("Test with the test case id "+testCaseId + " passed" );
+			Description= sb.toString();
+		}
+		else
+			Description= sb.toString();
+		
+		if (testCaseId == 0) 
+		{
+			log.warn(getName() + " was not associated with a TM test case id");
+		} else 
+		{
+			log.info(getName() + " (" + testCaseId + ") " + " passed? "	+ wasSuccessful());
+			if (!Boolean.parseBoolean(updateTM)) 
+			{
+				log.info("Updating TM disabled by system property updateTM");
+			} 
+			else if (!testType.equals("perf")) 
+			{
+				testUtil.updateTestManager(testCaseId,(wasSuccessful() == true ? "Pass" : "Fail"),
+						cleanupString(wasSuccessful() == true ? "Pass" : error.getLocalizedMessage()),
+						cleanupString(wasSuccessful() == true ? Description	: getStackTrace(error)));
+			}
+		}
+	}
+
+	protected void runTest() throws Throwable {
+		try {
+			super.runTest();
+		} catch (Throwable t) {
+			error = t;
+			throw t;
+		}
+	}
+
+	/**
+	 * Clean up the strings before sending to TM as the TM API is very fragile
+	 * 
+	 * @param input
+	 */
+	private String cleanupString(String input) {
+		if (input == null || input.length() == 0) {
+			return "";
+		}
+		StringBuilder sb = new StringBuilder(input);
+		int length = sb.length();
+		for (int i = 0; i < length; i++) {
+			char ch = sb.charAt(i);
+			if (ch == '$') {
+				sb.setCharAt(i, '%');
+			} else if (ch == '[' || ch == ']') {
+				sb.setCharAt(i, ' ');
+			}
+		}
+		return sb.toString();
+	}
+
+	/*
+	 * Get stack trace as a string
+	 */
+	private static String getStackTrace(Throwable aThrowable) {
+		final Writer result = new StringWriter();
+		final PrintWriter printWriter = new PrintWriter(result);
+		aThrowable.printStackTrace(printWriter);
+		return result.toString();
+	}
+	
+	/*
+	 * Provide data structures to store data local to each thread. For example
+	 * each thread could have it's own user context object
+	 */
+	private static ThreadLocal<HashMap> threadLocalData = new ThreadLocal<HashMap>() {
+		protected HashMap initialValue() {
+			return new HashMap();
+		}
+	};
+
+	public static Object getThreadData(Object key) {
+		return threadLocalData.get().get(key);
+	}
+
+	public static void setThreadData(Object key, Object value) {
+		threadLocalData.get().put(key, value);
+	}
+
+
+	/*
+	 * Get cause of inner most nested exception. Example usage:
+	 * getInnermostException(e).getClass().isInstance(new
+	 * IllegalArgumentException()))
+	 */
+	public Throwable getInnermostException(Throwable ex) {
+		Throwable currentCause = ex.getCause();
+		if (currentCause == null) {
+			return null;
+		} else {
+			Throwable innerCause = getInnermostException(currentCause);
+			if (innerCause == null) {
+				return currentCause;
+			} else {
+				return innerCause;
+			}
+		}
+	}
+	
+	
+	public static void setTestID(int testID)
+	{
+		testCaseIdFromTest=testID;
+		
+	}
+
+}

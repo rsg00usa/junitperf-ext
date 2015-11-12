@@ -1,0 +1,6 @@
+com.yahoo.idm.secrets.dir=/home/y/var/idm
+com.yahoo.sm.ads.audit.multicastAddress=239.11.1.1 
+com.yahoo.sm.ads.audit.multicastPort=9191
+server.roles.primary.id=1
+server.id=1
+pod.id=1
